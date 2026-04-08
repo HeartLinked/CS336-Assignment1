@@ -1,0 +1,2 @@
+vocab_size=10000
+num_merges=9743
