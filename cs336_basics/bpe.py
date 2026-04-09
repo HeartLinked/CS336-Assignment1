@@ -190,12 +190,15 @@ if __name__ == '__main__':
     start = time.perf_counter()
 
     vocab, merges = my_run_train_bpe(
-        input_path="/Users/bytedance/Documents/Dev/learn-daft/py/data/TinyStoriesV2-GPT4-train.txt",
-        vocab_size=10000,
+        # input_path="/Users/bytedance/Documents/Dev/learn-daft/py/data/TinyStoriesV2-GPT4-train.txt",
+        input_path="/Users/bytedance/Documents/Dev/learn-daft/py/data/owt_train.txt",
+        # vocab_size=10000,
+        vocab_size=32000,
         special_tokens=["<|endoftext|>"],
         num_processes = min(4, os.cpu_count() or 1)
     )
-    save_bpe_artifacts(vocab, merges, "artifacts/tinystories_bpe_10k")
+    # save_bpe_artifacts(vocab, merges, "artifacts/tinystories_bpe_10k")
+    save_bpe_artifacts(vocab, merges, "artifacts/owt_bpe_32k")
 
     end = time.perf_counter()
     print(f"运行时间: {end - start:.6f} 秒")

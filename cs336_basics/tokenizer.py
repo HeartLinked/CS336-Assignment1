@@ -1,4 +1,5 @@
 import json
+import numpy as np
 
 import regex as re
 from typing import Iterable, Iterator, Any
@@ -38,6 +39,8 @@ class Tokenizer:
             self.pattern_pre = "|".join(escaped)
         else:
             self.pattern_pre = None
+
+        self.merge_ranks = {pair: i for i, pair in enumerate(self.merges)}
         
     @classmethod
     def from_files(cls, vocab_filepath, merge_filepath, special_tokens=None):
@@ -85,21 +88,26 @@ class Tokenizer:
         return ids
     
     def _apply_bpe(self, pieces: list[bytes]) -> list[bytes]:
-        # pieces is a pretokend word, merge it
         pieces = list(pieces)
+
         while len(pieces) > 1:
-            merged = False
-            for left_tok, right_tok in self.merges:
-                for i in range(len(pieces) - 1):
-                    if pieces[i] == left_tok and pieces[i + 1] == right_tok:
-                        merged_piece = pieces[i] + pieces[i + 1]
-                        pieces = pieces[:i] + [merged_piece] + pieces[i + 2:]
-                        merged = True
-                        break
-                if merged:
-                    break
-            if not merged:
+            best_i = None
+            best_rank = None
+
+            for i in range(len(pieces) - 1):
+                pair = (pieces[i], pieces[i + 1])
+                rank = self.merge_ranks.get(pair)
+                if rank is not None and (best_rank is None or rank < best_rank):
+                    best_rank = rank
+                    best_i = i
+
+            if best_i is None:
                 break
+
+            i = best_i
+            merged_piece = pieces[i] + pieces[i + 1]
+            pieces = pieces[:i] + [merged_piece] + pieces[i + 2:]
+
         return pieces
 
     def _encode_pretoken(self, pretoken_bytes: list[bytes]) -> list[int]:
@@ -164,3 +172,40 @@ def my_get_tokenizer(
         A BPE tokenizer that uses the provided vocab, merges, and special tokens.
     """
     return Tokenizer(vocab, merges, special_tokens)
+
+
+def encode_dataset(tokenizer, input_path: str, output_path: str, log_every: int = 10000):
+    token_ids = []
+    total_lines = 0
+
+    with open(input_path, "r", encoding="utf-8") as f:
+        for line in f:
+            token_ids.extend(tokenizer.encode(line))
+            total_lines += 1
+
+            if total_lines % log_every == 0:
+                print(f"processed {total_lines} lines, current_tokens={len(token_ids)}")
+
+    if token_ids and max(token_ids) > 65535:
+        raise ValueError("Token id exceeds uint16 range")
+
+    arr = np.array(token_ids, dtype=np.uint16)
+    np.save(output_path, arr)
+    print(f"saved {output_path}, num_tokens={len(arr)}")
+
+
+if __name__ == "__main__":
+    tiny_tokenizer = Tokenizer.from_files(
+        "/Users/bytedance/Documents/Dev/learn-daft/py/assignment1-basics/artifacts/tinystories_bpe_10k/vocab.json",
+        "/Users/bytedance/Documents/Dev/learn-daft/py/assignment1-basics/artifacts/tinystories_bpe_10k/merges.json",
+        special_tokens=["<|endoftext|>"],
+    )
+
+    encode_dataset(tiny_tokenizer, "/Users/bytedance/Documents/Dev/learn-daft/py/data/TinyStoriesV2-GPT4-train.txt", "/Users/bytedance/Documents/Dev/learn-daft/py/assignment1-basics/artifacts/tinystories_bpe_10k/tinystories_train_ids_2.npy")
+    # encode_dataset(tiny_tokenizer, "data/tinystories_dev.txt", "data/tinystories_dev_ids.npy")
+    print("finished")
+    # owt_tokenizer = Tokenizer.from_files(
+    #     "openwebtext_tokenizer/vocab.json",
+    #     "openwebtext_tokenizer/merges.json",
+    #     special_tokens=["<|endoftext|>"],
+    # )
