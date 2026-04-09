@@ -381,7 +381,7 @@ def run_rmsnorm(
     Args:
         d_model (int): The dimensionality of the RMSNorm input.
         eps: (float): A value added to the denominator for numerical stability.
-        weights (Float[Tensor, "d_model"]): RMSNorm weights.
+        weights (Float[Tensor, "d_model"]): RMSNorm weights. "缩放参数，1维，长度等于d_model, 模型 hidden size，也就是要norm的激活值的个数"
         in_features (Float[Tensor, "... d_model"]): Input features to run RMSNorm on. Can have arbitrary leading
             dimensions.
 
@@ -389,8 +389,9 @@ def run_rmsnorm(
         Float[Tensor,"... d_model"]: Tensor of with the same shape as `in_features` with the output of running
         RMSNorm of the `in_features`.
     """
-    my_RMSNorm = RMSNorm()
-    
+    my_RMSNorm = RMSNorm(d_model, eps, device = weights.device, dtype=weights.dtype)
+    my_RMSNorm.load_state_dict({"weight": weights})
+    return my_RMSNorm(in_features)
 
 
 def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
