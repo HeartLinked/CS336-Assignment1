@@ -6,6 +6,8 @@ from typing import IO, Any, BinaryIO
 
 import numpy.typing as npt
 import torch
+import einops
+import math
 from jaxtyping import Bool, Float, Int
 from torch import Tensor
 
@@ -118,7 +120,18 @@ def run_scaled_dot_product_attention(
     Returns:
         Float[Tensor, " ... queries d_v"]: Output of SDPA
     """
-    raise NotImplementedError
+    Q_mul_k = einops.einsum(Q, K, "... queries d_k, ... keys d_k -> ... queries keys")
+    d_k = K.shape[-1]
+    scores = Q_mul_k / math.sqrt(d_k)
+
+    if mask is not None:
+        scores = scores.masked_fill(~mask, float("-inf"))
+
+    attn = torch.softmax(scores, dim=-1)
+
+    output = einops.einsum(attn, V, "... queries keys, ... keys d_v -> ... queries d_v")
+
+    return output
 
 
 def run_multihead_self_attention(
