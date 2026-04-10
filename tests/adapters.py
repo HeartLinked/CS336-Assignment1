@@ -14,6 +14,7 @@ from cs336_basics.tokenizer import my_get_tokenizer
 from cs336_basics.linear import Linear
 from cs336_basics.embedding import Embedding
 from cs336_basics.rmsnorm import RMSNorm
+from cs336_basics.swiglu import SwiGlu
 
 def run_linear(
     d_in: int,
@@ -91,10 +92,11 @@ def run_swiglu(
     # If your state dict keys match, you can use `load_state_dict()`
     # swiglu.load_state_dict(weights)
     # You can also manually assign the weights
-    # swiglu.w1.weight.data = w1_weight
-    # swiglu.w2.weight.data = w2_weight
-    # swiglu.w3.weight.data = w3_weight
-    raise NotImplementedError
+    swiglu = SwiGlu(d_ff=d_ff, d_model=d_model, device=w1_weight.device, dtype=w1_weight.dtype)
+    swiglu.w1.weight.data = w1_weight
+    swiglu.w2.weight.data = w2_weight
+    swiglu.w3.weight.data = w3_weight
+    return swiglu(in_features)
 
 
 def run_scaled_dot_product_attention(
