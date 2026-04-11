@@ -10,7 +10,6 @@ from cs336_basics.rope import RoPE
 from cs336_basics.scaled_dot_product_attention import scaled_dot_product_attention
 
 
-
 class MultiHeadSelfAttentionWithRope(nn.Module):
     def __init__(self, d_model: int, num_heads: int, rope_cache: RoPE):
         super().__init__()

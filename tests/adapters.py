@@ -20,6 +20,7 @@ from cs336_basics.swiglu import SwiGlu
 from cs336_basics.rope import RoPE
 from cs336_basics.multihead_self_attention_with_rope import MultiHeadSelfAttentionWithRope
 from cs336_basics.scaled_dot_product_attention import scaled_dot_product_attention
+from cs336_basics.transformer_block import TransformerBlock
 
 def run_linear(
     d_in: int,
@@ -334,7 +335,43 @@ def run_transformer_block(
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
         running the Transformer block on the input features while using RoPE.
     """
-    raise NotImplementedError
+    device = in_features.device
+    dtype = in_features.dtype
+    head_dim = d_model // num_heads
+
+    # 按你的 RoPE 实现来构造
+    rope_cache = RoPE(
+        d_k=head_dim,
+        max_seq_len=max_seq_len,
+        theta=theta,
+        device=device,
+    )
+
+    block = TransformerBlock(
+        d_model=d_model,
+        num_heads=num_heads,
+        d_ff=d_ff,
+        rope_cache=rope_cache,
+        device=device,
+    ).to(device=device, dtype=dtype)
+
+    with torch.no_grad():
+        # attention
+        block.attn.weight_q.weight.copy_(weights["attn.q_proj.weight"])
+        block.attn.weight_k.weight.copy_(weights["attn.k_proj.weight"])
+        block.attn.weight_v.weight.copy_(weights["attn.v_proj.weight"])
+        block.attn.weight_o.weight.copy_(weights["attn.output_proj.weight"])
+
+        # rmsnorm
+        block.norm1.weight.copy_(weights["ln1.weight"])
+        block.norm2.weight.copy_(weights["ln2.weight"])
+
+        # ffn / swiglu
+        block.ff.w1.weight.copy_(weights["ffn.w1.weight"])
+        block.ff.w2.weight.copy_(weights["ffn.w2.weight"])
+        block.ff.w3.weight.copy_(weights["ffn.w3.weight"])
+
+    return block(in_features)
 
 
 def run_transformer_lm(
