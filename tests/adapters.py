@@ -18,6 +18,8 @@ from cs336_basics.embedding import Embedding
 from cs336_basics.rmsnorm import RMSNorm
 from cs336_basics.swiglu import SwiGlu
 from cs336_basics.rope import RoPE
+from cs336_basics.multihead_self_attention_with_rope import MultiHeadSelfAttentionWithRope
+from cs336_basics.scaled_dot_product_attention import scaled_dot_product_attention
 
 def run_linear(
     d_in: int,
@@ -120,18 +122,7 @@ def run_scaled_dot_product_attention(
     Returns:
         Float[Tensor, " ... queries d_v"]: Output of SDPA
     """
-    Q_mul_k = einops.einsum(Q, K, "... queries d_k, ... keys d_k -> ... queries keys")
-    d_k = K.shape[-1]
-    scores = Q_mul_k / math.sqrt(d_k)
-
-    if mask is not None:
-        scores = scores.masked_fill(~mask, float("-inf"))
-
-    attn = torch.softmax(scores, dim=-1)
-
-    output = einops.einsum(attn, V, "... queries keys, ... keys d_v -> ... queries d_v")
-
-    return output
+    return scaled_dot_product_attention(Q, K, V, mask)
 
 
 def run_multihead_self_attention(
@@ -165,7 +156,40 @@ def run_multihead_self_attention(
         Float[Tensor, " ... sequence_length d_model"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    raise NotImplementedError
+    head_dim = d_model // num_heads
+
+    Q = einops.einsum(
+        in_features, q_proj_weight,
+        "... sequence d_in, d_out d_in -> ... sequence d_out"
+    )
+    K = einops.einsum(
+        in_features, k_proj_weight,
+        "... sequence d_in, d_out d_in -> ... sequence d_out"
+    )
+    V = einops.einsum(
+        in_features, v_proj_weight,
+        "... sequence d_in, d_out d_in -> ... sequence d_out"
+    )
+    
+    Q = einops.rearrange(Q, "... sequence (h d_k) -> ... h sequence d_k", h = num_heads)
+    K = einops.rearrange(K, "... sequence (h d_k) -> ... h sequence d_k", h = num_heads)
+    V = einops.rearrange(V, "... sequence (h d_v) -> ... h sequence d_v", h = num_heads)
+
+    seq_len = in_features.shape[-2]
+    causal_mask = torch.tril(
+        torch.ones(seq_len, seq_len, dtype=torch.bool, device=in_features.device)
+    )
+
+    attn_out = run_scaled_dot_product_attention(Q, K, V, mask=causal_mask)
+    # attn_out: [..., heads, seq, head_dim]
+
+    attn_out = einops.rearrange(attn_out, "... h seq d -> ... seq (h d)")
+    # [..., seq, d_model]
+    out = einops.einsum(
+        attn_out, o_proj_weight,
+        "... seq d_in, d_out d_in -> ... seq d_out"
+    )
+    return out
 
 
 def run_multihead_self_attention_with_rope(
@@ -205,7 +229,16 @@ def run_multihead_self_attention_with_rope(
         Float[Tensor, " ... sequence_length d_model"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    raise NotImplementedError
+    head_dim = d_model // num_heads
+    rope = RoPE(d_k=head_dim, theta=theta, max_seq_len=max_seq_len, device=in_features.device)
+    multi = MultiHeadSelfAttentionWithRope(d_model=d_model, num_heads=num_heads, rope_cache=rope)
+    
+    multi.weight_q.weight.data = q_proj_weight
+    multi.weight_k.weight.data = k_proj_weight
+    multi.weight_v.weight.data = v_proj_weight
+    multi.weight_o.weight.data = o_proj_weight
+    out = multi(in_features, token_positions)
+    return out
 
 
 def run_rope(
