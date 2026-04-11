@@ -20,6 +20,7 @@ from cs336_basics.swiglu import SwiGlu
 from cs336_basics.rope import RoPE
 from cs336_basics.multihead_self_attention_with_rope import MultiHeadSelfAttentionWithRope
 from cs336_basics.scaled_dot_product_attention import scaled_dot_product_attention
+from cs336_basics.transformerLM import TransformerLM
 from cs336_basics.transformer_block import TransformerBlock
 
 def run_linear(
@@ -339,7 +340,6 @@ def run_transformer_block(
     dtype = in_features.dtype
     head_dim = d_model // num_heads
 
-    # 按你的 RoPE 实现来构造
     rope_cache = RoPE(
         d_k=head_dim,
         max_seq_len=max_seq_len,
@@ -453,7 +453,47 @@ def run_transformer_lm(
         Float[Tensor, "batch_size sequence_length vocab_size"]: Tensor with the predicted unnormalized
         next-word distribution for each token.
     """
-    raise NotImplementedError
+    device = in_indices.device
+    param_dtype = weights["token_embeddings.weight"].dtype
+
+    model = TransformerLM(
+        vocab_size=vocab_size,
+        context_length=context_length,
+        d_model=d_model,
+        num_layers=num_layers,
+        num_heads=num_heads,
+        d_ff=d_ff,
+        rope_theta=rope_theta,
+        device=device,
+    ).to(device=device, dtype=param_dtype)
+
+    with torch.no_grad():
+        # token embedding / final norm / lm head
+        model.token_embeddings.weight.copy_(weights["token_embeddings.weight"])
+        model.ln_final.weight.copy_(weights["ln_final.weight"])
+        model.lm_head.weight.copy_(weights["lm_head.weight"])
+
+        # each transformer block
+        for layer_idx in range(num_layers):
+            block = model.layers[layer_idx]
+            prefix = f"layers.{layer_idx}"
+
+            # attention
+            block.attn.weight_q.weight.copy_(weights[f"{prefix}.attn.q_proj.weight"])
+            block.attn.weight_k.weight.copy_(weights[f"{prefix}.attn.k_proj.weight"])
+            block.attn.weight_v.weight.copy_(weights[f"{prefix}.attn.v_proj.weight"])
+            block.attn.weight_o.weight.copy_(weights[f"{prefix}.attn.output_proj.weight"])
+
+            # rmsnorm
+            block.norm1.weight.copy_(weights[f"{prefix}.ln1.weight"])
+            block.norm2.weight.copy_(weights[f"{prefix}.ln2.weight"])
+
+            # feed-forward / SwiGLU
+            block.ff.w1.weight.copy_(weights[f"{prefix}.ffn.w1.weight"])
+            block.ff.w2.weight.copy_(weights[f"{prefix}.ffn.w2.weight"])
+            block.ff.w3.weight.copy_(weights[f"{prefix}.ffn.w3.weight"])
+
+    return model(in_indices)
 
 
 def run_rmsnorm(

@@ -26,7 +26,6 @@ class RoPE(nn.Module):
         
 
     def forward(self, x: torch.Tensor, token_positions: torch.Tensor) -> torch.Tensor:
-        # x: [batch, seq_len, d_k]
         # token_positions: [batch, seq_len]
         cos = self.cos_cached[token_positions]   # [batch, seq_len, d_k // 2]
         sin = self.sin_cached[token_positions]   # [batch, seq_len, d_k // 2]
