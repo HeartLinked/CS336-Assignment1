@@ -26,6 +26,8 @@ from cs336_basics.cross_entropy import my_run_cross_entropy
 from cs336_basics.adamw import AdamW
 from cs336_basics.lr import get_lr_cosine_schedule
 from cs336_basics.gradient_clipping import gradient_clipping
+from cs336_basics.data import get_batch
+from cs336_basics.checkpoint import save_checkpoint
 
 def run_linear(
     d_in: int,
@@ -559,11 +561,7 @@ def run_get_batch(
         is the sampled input sequences, and the second tuple item is the corresponding
         language modeling labels.
     """
-    max_start = len(dataset) - context_length
-    start_indices = torch.randint(0, max_start, (batch_size,))
-    x = torch.stack([torch.from_numpy(dataset[i:i + context_length].astype("int64")) for i in start_indices])
-    y = torch.stack([torch.from_numpy(dataset[i + 1:i + context_length + 1].astype("int64")) for i in start_indices])
-    return x.to(device), y.to(device)
+    return get_batch(dataset, batch_size, context_length, device)
 
 
 def run_softmax(in_features: Float[Tensor, " ..."], dim: int) -> Float[Tensor, " ..."]:
@@ -653,7 +651,7 @@ def run_save_checkpoint(
             we've completed.
         out (str | os.PathLike | BinaryIO | IO[bytes]): Path or file-like object to serialize the model, optimizer, and iteration to.
     """
-    raise NotImplementedError
+    save_checkpoint(model=model, optimizer=optimizer, iteration=iteration, out=out)
 
 
 def run_load_checkpoint(
